@@ -1,0 +1,34 @@
+{
+    "name": "dazamate/daz-s3-image-sync",
+    "autoload": {
+        "psr-4": {
+            "Dazamate\\S3ImageSync\\": "includes/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Dazamate\\S3ImageSync\\Tests\\": "tests/"
+        }
+    },
+    "require": {
+        "php": ">=8.5",
+        "aws/aws-sdk-php": "^3.0",
+        "intervention/image": "^3.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^13.0",
+        "brain/monkey": "^2.7",
+        "php-mock/php-mock": "^2.6",
+        "phpstan/phpstan": "^2.0",
+        "szepeviktor/phpstan-wordpress": "^2.0"
+    },
+    "config": {
+        "platform": {
+            "php": "8.5.0"
+        }
+    },
+    "scripts": {
+        "test": "phpunit",
+        "analyse": "phpstan analyse --memory-limit=1G"
+    }
+}

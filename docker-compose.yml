@@ -1,0 +1,13 @@
+services:
+  php:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: daz-s3-image-sync-php:8.5
+    working_dir: /app
+    volumes:
+      - .:/app
+      - composer-cache:/root/.composer/cache
+
+volumes:
+  composer-cache:

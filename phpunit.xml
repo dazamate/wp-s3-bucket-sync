@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit
+    backupGlobals="false"
+    colors="true"
+    bootstrap="tests/bootstrap.php"
+>
+    <testsuites>
+        <testsuite name="Daz S3 Image Sync Test Suite">
+            <directory suffix=".php">tests</directory>
+            <exclude>tests/bootstrap.php</exclude>
+            <exclude>tests/Integration/IntegrationTestCase.php</exclude>
+        </testsuite>
+    </testsuites>
+</phpunit>
