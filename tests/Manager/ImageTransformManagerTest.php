@@ -31,11 +31,11 @@ class ImageTransformManagerTest extends TestCase {
         $this->assertCount(2, $jobs);
         $this->assertContainsOnlyInstancesOf(S3UploadJob::class, $jobs);
 
-        $this->assertSame('media/2026/06/photo.webp', $jobs[0]->object_key);
+        $this->assertSame('media/42/photo.webp', $jobs[0]->object_key);
         $this->assertSame('/var/www/uploads/2026/06/photo.webp', $jobs[0]->local_path);
         $this->assertSame('image/webp', $jobs[0]->mime);
 
-        $this->assertSame('media/2026/06/photo-150x150.webp', $jobs[1]->object_key);
+        $this->assertSame('media/42/photo-150x150.webp', $jobs[1]->object_key);
     }
 
     public function testMapVariantJobsPreservesAccumulator(): void {
@@ -52,6 +52,6 @@ class ImageTransformManagerTest extends TestCase {
         $jobs = ImageTransformManager::map_variant_jobs([], 42, '');
 
         $this->assertSame('image/avif', $jobs[0]->mime);
-        $this->assertSame('2026/06/photo.avif', $jobs[0]->object_key);
+        $this->assertSame('42/photo.avif', $jobs[0]->object_key);
     }
 }

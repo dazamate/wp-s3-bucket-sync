@@ -18,56 +18,77 @@ class ImageVariantServeManagerTest extends TestCase {
         parent::tearDown();
     }
 
-    public function testRewriteImageSrcSwapsFullSizeToVariant(): void {
-        Functions\when('get_post_meta')->justReturn([
+    // Stub get_post_meta so the s3 url and variant map are returned per key.
+    private function stubMeta(string $s3_url, array|string $variants): void {
+        Functions\when('get_post_meta')->alias(static function ($post_id, $key, $single = false) use ($s3_url, $variants) {
+            return match ($key) {
+                's3_url'                => $s3_url,
+                's3_transform_variants' => $variants,
+                default                 => '',
+            };
+        });
+    }
+
+    public function testRewriteImageSrcRebasesAndSwapsFullSizeToVariant(): void {
+        $this->stubMeta('https://cdn.example.com/media/42/photo.jpg', [
             '2026/06/photo.jpg' => '2026/06/photo.webp',
         ]);
 
-        $image = ['https://cdn.example.com/media/2026/06/photo.jpg', 800, 600, false];
+        $image = ['https://cdn.example.com/media/42/photo.jpg', 800, 600, false];
 
         $result = ImageVariantServeManager::rewrite_image_src($image, 42);
 
-        $this->assertSame('https://cdn.example.com/media/2026/06/photo.webp', $result[0]);
+        $this->assertSame('https://cdn.example.com/media/42/photo.webp', $result[0]);
         $this->assertSame(800, $result[1]);
     }
 
-    public function testRewriteImageSrcLeavesUnmappedUrlsUntouched(): void {
-        Functions\when('get_post_meta')->justReturn([]);
+    public function testRewriteImageSrcRebasesLocalUrlWithoutVariant(): void {
+        $this->stubMeta('https://cdn.example.com/media/42/photo.jpg', []);
 
-        $image = ['https://cdn.example.com/media/2026/06/photo.jpg', 800, 600, false];
+        $image = ['http://site.test/wp-content/uploads/2026/06/photo-300x200.jpg', 300, 200, true];
+
+        $result = ImageVariantServeManager::rewrite_image_src($image, 42);
+
+        $this->assertSame('https://cdn.example.com/media/42/photo-300x200.jpg', $result[0]);
+    }
+
+    public function testRewriteImageSrcReturnsUnchangedWhenNotSynced(): void {
+        $this->stubMeta('', []);
+
+        $image = ['http://site.test/wp-content/uploads/2026/06/photo.jpg', 800, 600, false];
 
         $this->assertSame($image, ImageVariantServeManager::rewrite_image_src($image, 42));
     }
 
-    public function testRewriteSrcsetSwapsEverySource(): void {
-        Functions\when('get_post_meta')->justReturn([
+    public function testRewriteSrcsetRebasesEverySource(): void {
+        $this->stubMeta('https://cdn.example.com/media/42/photo.jpg', [
             '2026/06/photo-150x150.jpg' => '2026/06/photo-150x150.webp',
             '2026/06/photo-300x200.jpg' => '2026/06/photo-300x200.webp',
         ]);
 
         $sources = [
-            150 => ['url' => 'https://cdn.example.com/media/2026/06/photo-150x150.jpg', 'descriptor' => 'w', 'value' => 150],
-            300 => ['url' => 'https://cdn.example.com/media/2026/06/photo-300x200.jpg', 'descriptor' => 'w', 'value' => 300],
+            150 => ['url' => 'http://site.test/wp-content/uploads/2026/06/photo-150x150.jpg', 'descriptor' => 'w', 'value' => 150],
+            300 => ['url' => 'http://site.test/wp-content/uploads/2026/06/photo-300x200.jpg', 'descriptor' => 'w', 'value' => 300],
         ];
 
         $result = ImageVariantServeManager::rewrite_srcset($sources, [], '', [], 42);
 
-        $this->assertSame('https://cdn.example.com/media/2026/06/photo-150x150.webp', $result[150]['url']);
-        $this->assertSame('https://cdn.example.com/media/2026/06/photo-300x200.webp', $result[300]['url']);
+        $this->assertSame('https://cdn.example.com/media/42/photo-150x150.webp', $result[150]['url']);
+        $this->assertSame('https://cdn.example.com/media/42/photo-300x200.webp', $result[300]['url']);
     }
 
     public function testRewriteSrcsetKeepsQueryString(): void {
-        Functions\when('get_post_meta')->justReturn([
+        $this->stubMeta('https://cdn.example.com/media/42/photo.jpg', [
             '2026/06/photo-150x150.jpg' => '2026/06/photo-150x150-opt.jpg',
         ]);
 
         $sources = [
-            150 => ['url' => 'https://cdn.example.com/media/2026/06/photo-150x150.jpg?v=2', 'descriptor' => 'w', 'value' => 150],
+            150 => ['url' => 'http://site.test/wp-content/uploads/2026/06/photo-150x150.jpg?v=2', 'descriptor' => 'w', 'value' => 150],
         ];
 
         $result = ImageVariantServeManager::rewrite_srcset($sources, [], '', [], 42);
 
-        $this->assertSame('https://cdn.example.com/media/2026/06/photo-150x150-opt.jpg?v=2', $result[150]['url']);
+        $this->assertSame('https://cdn.example.com/media/42/photo-150x150-opt.jpg?v=2', $result[150]['url']);
     }
 
     public function testRewriteImageSrcIgnoresFalse(): void {

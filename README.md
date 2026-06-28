@@ -4,8 +4,6 @@ Intercepts the WordPress media gallery and mirrors images (originals plus every
 generated size) to an Amazon S3 bucket. Synced attachments can be served from the
 bucket URL or a configured CDN.
 
-Follows the same structure and toolchain as `daz-seo` and the Surreal sync plugin.
-
 ## Requirements
 
 - PHP 8.5
@@ -16,6 +14,31 @@ Follows the same structure and toolchain as `daz-seo` and the Surreal sync plugi
 Settings → **S3 Image Sync** in the WordPress admin. Enter the bucket, region,
 access key, secret key, and optionally a custom endpoint (for S3-compatible
 storage), a key prefix, and a CDN base URL.
+
+## Bucket layout
+
+Every file belonging to an attachment — the original, each generated size, and
+any optimised variant (WebP/AVIF) — is stored together under a per-attachment
+folder keyed by the attachment's post ID:
+
+```
+{prefix}/{attachment_id}/{filename}
+```
+
+For example, attachment `42` with the optional prefix `media`:
+
+```
+media/42/photo.jpg
+media/42/photo-150x150.jpg
+media/42/photo-300x200.jpg
+media/42/photo.webp
+```
+
+This keeps each attachment's files grouped (rather than flattened into shared
+`YYYY/MM` folders) and makes a single attachment easy to locate with
+`aws s3 ls {prefix}/{attachment_id}/`. The optional key prefix is prepended as
+shown; leave it blank to store folders at the bucket root.
+
 
 ## WP-CLI
 

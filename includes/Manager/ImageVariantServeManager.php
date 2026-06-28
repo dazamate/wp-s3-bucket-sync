@@ -4,11 +4,13 @@ namespace Dazamate\S3ImageSync\Manager;
 
 use Dazamate\S3ImageSync\Enum\MetaKeys;
 
-// Serves the optimised variants in place of WordPress's originals. The variant
-// files live in the same directory (and therefore behind the same S3/CDN URL)
-// as the files WordPress references, so serving is a matter of swapping the
-// filename at the end of each URL for its recorded variant. This runs after the
-// S3 url rewrite, so the URLs it sees already point at the bucket/CDN.
+// Serves an attachment's images from its S3/CDN location. Because every file of
+// an attachment (original, generated sizes and optimised variants) is stored in
+// the same {prefix}/{post_id}/ folder, each requested image URL is rebased onto
+// the directory of the attachment's recorded S3 url and, where an optimised
+// variant exists, its filename is swapped for the variant. This decouples
+// serving from WordPress's uploads path layout, so the flattened key scheme
+// resolves correctly. Runs after the S3 url rewrite.
 class ImageVariantServeManager {
     public static function load_hooks(): void {
         add_filter('wp_get_attachment_image_src', [__CLASS__, 'rewrite_image_src'], 20, 2);
@@ -22,13 +24,13 @@ class ImageVariantServeManager {
             return $image;
         }
 
-        $map = self::basename_map((int) $attachment_id);
+        $base = self::base_url((int) $attachment_id);
 
-        if ($map === []) {
+        if ($base === null) {
             return $image;
         }
 
-        $image[0] = self::swap_url($image[0], $map);
+        $image[0] = self::rebase($image[0], $base, self::basename_map((int) $attachment_id));
 
         return $image;
     }
@@ -40,19 +42,40 @@ class ImageVariantServeManager {
             return $sources;
         }
 
-        $map = self::basename_map((int) $attachment_id);
+        $base = self::base_url((int) $attachment_id);
 
-        if ($map === []) {
+        if ($base === null) {
             return $sources;
         }
 
+        $map = self::basename_map((int) $attachment_id);
+
         foreach ($sources as $key => $source) {
             if (is_array($source) && isset($source['url']) && is_string($source['url'])) {
-                $sources[$key]['url'] = self::swap_url($source['url'], $map);
+                $sources[$key]['url'] = self::rebase($source['url'], $base, $map);
             }
         }
 
         return $sources;
+    }
+
+    // The directory the attachment's files live in on S3/CDN, derived from the
+    // recorded original url (e.g. https://cdn/media/42/photo.jpg => …/media/42).
+    // Returns null when the attachment has not been synced.
+    private static function base_url(int $post_id): ?string {
+        $s3_url = get_post_meta($post_id, MetaKeys::S3_URL_META_KEY->value, true);
+
+        if (!is_string($s3_url) || $s3_url === '') {
+            return null;
+        }
+
+        $last_slash = strrpos($s3_url, '/');
+
+        if ($last_slash === false) {
+            return null;
+        }
+
+        return substr($s3_url, 0, $last_slash);
     }
 
     // Map of original filename => optimised filename for one attachment.
@@ -77,29 +100,35 @@ class ImageVariantServeManager {
         return $map;
     }
 
-    // Replace the filename at the end of a URL's path with its variant, leaving
-    // the directory, host and any query/fragment intact.
+    // Rebuild a url so it points at the attachment's S3 directory, swapping the
+    // filename for its optimised variant when one is recorded and preserving any
+    // query string or fragment.
     // @param array<string, string> $map
-    private static function swap_url(string $url, array $map): string {
-        $path = (string) parse_url($url, PHP_URL_PATH);
+    private static function rebase(string $url, string $base, array $map): string {
+        $parts = parse_url($url);
+        $parts = is_array($parts) ? $parts : [];
 
-        if ($path === '') {
+        $path = isset($parts['path']) ? (string) $parts['path'] : '';
+        $filename = $path !== '' ? basename($path) : basename($url);
+
+        if ($filename === '') {
             return $url;
         }
 
-        $base = basename($path);
-
-        if ($base === '' || !isset($map[$base])) {
-            return $url;
+        if (isset($map[$filename])) {
+            $filename = $map[$filename];
         }
 
-        $replaced = preg_replace(
-            '/' . preg_quote($base, '/') . '(?=$|\?|#)/',
-            $map[$base],
-            $url,
-            1
-        );
+        $suffix = '';
 
-        return is_string($replaced) ? $replaced : $url;
+        if (isset($parts['query']) && $parts['query'] !== '') {
+            $suffix .= '?' . $parts['query'];
+        }
+
+        if (isset($parts['fragment']) && $parts['fragment'] !== '') {
+            $suffix .= '#' . $parts['fragment'];
+        }
+
+        return $base . '/' . $filename . $suffix;
     }
 }

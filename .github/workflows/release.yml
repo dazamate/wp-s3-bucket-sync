@@ -1,0 +1,106 @@
+name: Build & Release Plugin
+
+# Builds a production, namespace-scoped plugin zip (dev files excluded) and
+# publishes it as a GitHub release when the version in the plugin header is
+# above the latest existing release. Triggered manually from the Actions tab.
+on:
+  workflow_dispatch:
+
+# Required so the workflow can create releases and upload assets.
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read version from plugin header
+        id: version
+        run: |
+          VERSION=$(grep -iE '^\s*\*?\s*Version:' daz-s3-image-plugin.php \
+            | head -1 \
+            | sed -E 's/.*Version:[[:space:]]*//I' \
+            | tr -d '[:space:]\r')
+          if [ -z "$VERSION" ]; then
+            echo "::error::Could not parse Version from plugin header"
+            exit 1
+          fi
+          echo "Header version: $VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Get latest release version
+        id: latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Strip a leading "v" from the latest release tag; empty if none exist.
+          LATEST=$(gh release view --json tagName --jq '.tagName' 2>/dev/null \
+            | sed -E 's/^v//' || true)
+          echo "Latest release version: ${LATEST:-<none>}"
+          echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
+
+      - name: Check version was bumped
+        id: check
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          LATEST="${{ steps.latest.outputs.latest }}"
+          if [ -z "$LATEST" ]; then
+            echo "No previous release; proceeding."
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+          elif dpkg --compare-versions "$VERSION" gt "$LATEST"; then
+            echo "Header version $VERSION > latest release $LATEST; proceeding."
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Header version $VERSION is not greater than latest release $LATEST; skipping release."
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build production plugin zip
+        if: steps.check.outputs.proceed == 'true'
+        id: asset
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          # Build inside a clean public PHP 8.5 image — no docker compose, so no
+          # extra service containers are started. bin/build.sh detects it is
+          # already in a container (/.dockerenv) and runs the build directly.
+          # The zip is renamed inside the container (root) to dodge host-side
+          # permission issues on the root-owned build/ output.
+          docker run --rm \
+            -v "$PWD":/app -w /app \
+            -e VERSION \
+            -e COMPOSER_HOME=/tmp/composer \
+            php:8.5-cli bash -c '
+              set -euo pipefail
+              apt-get update
+              apt-get install -y --no-install-recommends git unzip zip curl libzip-dev libonig-dev
+              docker-php-ext-install zip mbstring >/dev/null
+              git config --global --add safe.directory /app
+              git config --global --add safe.directory /app/build/daz-s3-image-sync
+              curl -fsSL -o /usr/bin/composer https://getcomposer.org/download/latest-stable/composer.phar
+              chmod +x /usr/bin/composer
+              curl -fsSL -o /usr/local/bin/php-scoper \
+                https://github.com/humbug/php-scoper/releases/latest/download/php-scoper.phar
+              chmod +x /usr/local/bin/php-scoper
+              bash bin/build.sh
+              mv build/daz-s3-image-sync.zip "build/daz-s3-image-sync-v${VERSION}.zip"
+            '
+          echo "asset=build/daz-s3-image-sync-v${VERSION}.zip" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub release
+        if: steps.check.outputs.proceed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          gh release create "v${VERSION}" "${{ steps.asset.outputs.asset }}" \
+            --title "v${VERSION}" \
+            --target "${{ github.sha }}" \
+            --generate-notes

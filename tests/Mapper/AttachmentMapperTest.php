@@ -35,23 +35,23 @@ class AttachmentMapperTest extends TestCase {
         $this->assertCount(3, $jobs);
         $this->assertContainsOnlyInstancesOf(S3UploadJob::class, $jobs);
 
-        $this->assertSame('media/2026/06/photo.jpg', $jobs[0]->object_key);
+        $this->assertSame('media/42/photo.jpg', $jobs[0]->object_key);
         $this->assertSame('/var/www/uploads/2026/06/photo.jpg', $jobs[0]->local_path);
 
-        $this->assertSame('media/2026/06/photo-150x150.jpg', $jobs[1]->object_key);
+        $this->assertSame('media/42/photo-150x150.jpg', $jobs[1]->object_key);
         $this->assertSame('/var/www/uploads/2026/06/photo-150x150.jpg', $jobs[1]->local_path);
 
-        $this->assertSame('media/2026/06/photo-300x200.jpg', $jobs[2]->object_key);
+        $this->assertSame('media/42/photo-300x200.jpg', $jobs[2]->object_key);
     }
 
-    public function testMapWithoutPrefixUsesRelativePath(): void {
+    public function testMapWithoutPrefixGroupsByPostId(): void {
         Functions\when('get_attached_file')->justReturn('/var/www/uploads/2026/06/photo.jpg');
         Functions\when('wp_get_attachment_metadata')->justReturn([]);
 
         $jobs = AttachmentMapper::map([], 42, '');
 
         $this->assertCount(1, $jobs);
-        $this->assertSame('2026/06/photo.jpg', $jobs[0]->object_key);
+        $this->assertSame('42/photo.jpg', $jobs[0]->object_key);
     }
 
     public function testMapReturnsAccumulatorWhenNoFile(): void {

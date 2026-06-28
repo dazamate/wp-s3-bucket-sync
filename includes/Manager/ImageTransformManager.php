@@ -131,7 +131,7 @@ class ImageTransformManager {
 
             $jobs[] = new S3UploadJob(
                 local_path: $base_dir . '/' . $relative,
-                object_key: ObjectKey::build($prefix, $relative),
+                object_key: ObjectKey::build($prefix, $post_id, $relative),
                 mime: self::mime_for($relative),
             );
         }

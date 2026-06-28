@@ -36,7 +36,7 @@ class AttachmentMapper {
 
         $jobs[] = new S3UploadJob(
             local_path: $file,
-            object_key: ObjectKey::build($prefix, $original_relative),
+            object_key: ObjectKey::build($prefix, $post_id, $original_relative),
             mime: $mime,
         );
 
@@ -61,7 +61,7 @@ class AttachmentMapper {
 
             $jobs[] = new S3UploadJob(
                 local_path: $size_file,
-                object_key: ObjectKey::build($prefix, $size_relative),
+                object_key: ObjectKey::build($prefix, $post_id, $size_relative),
                 mime: $size_mime,
             );
         }
