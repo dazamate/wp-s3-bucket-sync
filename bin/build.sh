@@ -38,7 +38,9 @@ composer install --no-dev --optimize-autoloader --classmap-authoritative --no-in
 
 echo "==> Scoping namespaces into ${DIST}/"
 # Prefixes vendor namespaces and rewrites our source's references to match.
-php-scoper add-prefix \
+# Run via `php -d memory_limit=-1` because scoping the full aws-sdk tree blows
+# past PHP's default 128M limit (php-parser holds every file's AST in memory).
+php -d memory_limit=-1 "$(command -v php-scoper)" add-prefix \
     --config=scoper.inc.php \
     --output-dir="${DIST}" \
     --force \
